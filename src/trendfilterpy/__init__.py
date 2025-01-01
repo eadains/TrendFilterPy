@@ -1,0 +1,1 @@
+from trendfilterpy._estimator import TrendFilterRegression
