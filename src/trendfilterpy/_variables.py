@@ -1,8 +1,7 @@
+import cvxpy as cp
 import numpy as np
 import numpy.typing as npt
-from scipy.sparse import spdiags, dia_matrix
-from typing import Optional
-import cvxpy as cp
+from scipy.sparse import dia_matrix, spdiags
 
 
 def make_D_matrix(n: int) -> dia_matrix:
@@ -11,7 +10,7 @@ def make_D_matrix(n: int) -> dia_matrix:
 
 
 class FilterVar:
-    def __init__(self, x: npt.ArrayLike, name: Optional[str] = None) -> None:
+    def __init__(self, x: npt.ArrayLike) -> None:
         # TODO: Do we want to check for x to be 1-dimensional? I don't expect users to be creating these so that may
         # not be necessary, but also checking won't introduce much overhead given we aren't creating these very often
         self.sort_idx = np.argsort(x)
@@ -19,7 +18,12 @@ class FilterVar:
         self.unique_vals, self.rebuild_idx = np.unique(x, return_inverse=True)
         self.D_mat = make_D_matrix(len(self.unique_vals))
         self.beta = cp.Variable(len(self.unique_vals))
-        self.name = name
+
+
+class FittedFilterVar:
+    def __init__(self, unique_vals: npt.ArrayLike, beta: npt.NDArray) -> None:
+        self.unique_vals = unique_vals
+        self.beta = beta
 
     def predict(self, x: npt.ArrayLike):
         # Our fitted function is stepwise and right continuous so we want our index to satisfy a[i-1] <= v < a[i]
@@ -38,6 +42,18 @@ class CatVar:
     def __init__(self, x: npt.ArrayLike) -> None:
         self.unique_vals, self.rebuild_idx = np.unique(x, return_inverse=True)
         self.beta = cp.Variable(len(self.unique_vals))
+
+    def predict(self, x: npt.ArrayLike):
+        # TODO: Handle unseen categories
+        idx = np.searchsorted(self.unique_vals, x, side="right")
+        idx = np.where(idx == 0, idx, idx - 1)
+        return self.beta[idx]
+
+
+class FittedCatVar:
+    def __init__(self, unique_vals: npt.ArrayLike, beta: npt.NDArray) -> None:
+        self.unique_vals = unique_vals
+        self.beta = beta
 
     def predict(self, x: npt.ArrayLike):
         # TODO: Handle unseen categories

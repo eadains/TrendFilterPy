@@ -1,12 +1,13 @@
 # %%
+import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
 import polars.selectors as cs
-import numpy as np
+
 from trendfilterpy._estimator import TrendFilterRegression
-import matplotlib.pyplot as plt
 
 # %%
-df = pl.read_csv("./tests/french_AL_data.csv", infer_schema_length=25000)
+df = pl.read_csv("../tests/french_AL_data.csv", infer_schema_length=25000)
 model = TrendFilterRegression(lam=1000)
 model.fit(
     df.select(
@@ -50,7 +51,7 @@ test = model.vars_[0]
 plt.plot(test.unique_vals, test.beta)
 
 # %%
-plt.scatter(df.select(pl.col("price").log()), model.fitted_values_)
+plt.scatter(df.select(pl.col("price").log()), model.mu_)
 
 # %%
 model.vars_[0].predict([-1000000, 14000, 15000, 1000, 5000, 1000000])
