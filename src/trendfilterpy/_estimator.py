@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 import cvxpy as cp
 import numpy as np
@@ -22,7 +22,13 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         self.dist = dist
         self.link = link
 
-    def fit(self, X: npt.ArrayLike, y: npt.ArrayLike, categorical_features: Optional[list[int]] = None):
+    def fit(
+        self,
+        X: npt.ArrayLike,
+        y: npt.ArrayLike,
+        weights: Optional[npt.ArrayLike] = None,
+        categorical_features: Optional[list[int]] = None,
+    ):
         # TODO: Check for convexity of self.dist deviance method
         # TODO: Check for monotonicity of self.link method
         if not categorical_features:
@@ -38,9 +44,15 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         vars = []
         for i in range(X.shape[1]):
             if i in categorical_features:
-                vars.append(CatVar(X[:, i]))
+                vars.append(
+                    # validate_data() sets feature_names_in_ if feature names are given by X or else deletes the
+                    # attribute. The type-checker does not like this.
+                    CatVar(X[:, i], name=self.feature_names_in_[i] if hasattr(self, "feature_names_in_") else None)  # type: ignore
+                )
             else:
-                vars.append(FilterVar(X[:, i]))
+                vars.append(
+                    FilterVar(X[:, i], name=self.feature_names_in_[i] if hasattr(self, "feature_names_in_") else None)  # type: ignore
+                )
 
         alpha = cp.Variable(name="alpha")
         eta = alpha + cp.sum([var.beta[var.rebuild_idx] for var in vars])
@@ -55,9 +67,11 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
                 penalty_terms.append(cp.norm(var.D_mat @ var.beta, 1))
         penalty = cp.sum(penalty_terms)
 
-        objective = cp.Minimize(self.dist().deviance(y, mu) + self.lam * penalty)
+        weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
+
+        objective = cp.Minimize(self.dist().deviance(y, mu, weights) + self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
-        # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero contraints is not
+        # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         problem = cp.Problem(objective, constraints)  # type: ignore
         results = problem.solve(solver="CLARABEL")
@@ -71,9 +85,9 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
                 raise ValueError(f"Beta vector for var {i} is None and is not being fitted correctly")
 
             if type(var) is CatVar:
-                self.vars_.append(FittedCatVar(var.unique_vals, var.beta.value))
+                self.vars_.append(FittedCatVar(var.unique_vals, var.beta.value, var.beta.name()))
             elif type(var) is FilterVar:
-                self.vars_.append(FittedFilterVar(var.unique_vals, var.beta.value))
+                self.vars_.append(FittedFilterVar(var.unique_vals, var.beta.value, var.beta.name()))
 
         self.mu_ = mu.value
         self.eta_ = eta.value
