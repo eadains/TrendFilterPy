@@ -56,7 +56,6 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
 
         alpha = cp.Variable(name="alpha")
         eta = alpha + cp.sum([var.beta[var.rebuild_idx] for var in vars])
-        mu = self.link().eval_inverse(eta)
 
         penalty_terms = []
         for var in vars:
@@ -69,8 +68,10 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
 
         weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
 
-        objective = cp.Minimize(self.dist().deviance(y, mu, weights) + self.lam * penalty)
+        objective = cp.Minimize(self.dist().deviance(y, eta, weights, self.link()) + self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
+        # TODO: Set initial guess intelligently from data
+        # TODO: Test solver settings to increase performance for our specific problem
         # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         problem = cp.Problem(objective, constraints)  # type: ignore
@@ -89,7 +90,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
             elif type(var) is FilterVar:
                 self.vars_.append(FittedFilterVar(var.unique_vals, var.beta.value, var.beta.name()))
 
-        self.mu_ = mu.value
+        self.mu_ = self.link().eval_inverse(eta).value
         self.eta_ = eta.value
 
         if alpha.value is None:

@@ -1,5 +1,20 @@
-from trendfilterpy._dists import NormalDistribution
+from trendfilterpy._dists import (
+    BinomialDistribution,
+    GammaDistribution,
+    InverseGaussianDistribution,
+    NormalDistribution,
+    PoissonDistribution,
+)
 from trendfilterpy._estimator import TrendFilterRegression
-from trendfilterpy._links import IdentityLink
+from trendfilterpy._links import IdentityLink, LogLink
 
-__all__ = ["NormalDistribution", "TrendFilterRegression", "IdentityLink"]
+__all__ = [
+    "NormalDistribution",
+    "BinomialDistribution",
+    "GammaDistribution",
+    "InverseGaussianDistribution",
+    "PoissonDistribution",
+    "TrendFilterRegression",
+    "IdentityLink",
+    "LogLink",
+]
