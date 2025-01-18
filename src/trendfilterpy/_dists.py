@@ -6,8 +6,6 @@ import numpy.typing as npt
 
 from trendfilterpy._links import IdentityLink, LinkFunction, LogitLink, LogLink
 
-T = TypeVar("T", bound=Union[npt.NDArray, cp.Expression])
-
 
 # TODO: Implement test suite for convexity of deviance methods
 class Distribution(ABC):
@@ -19,7 +17,14 @@ class Distribution(ABC):
         pass
 
     @abstractmethod
-    def deviance(self, y: T, eta: T, w: T, link: LinkFunction, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         """
         Calculate the deviance for the distribution with a specific link function.
 
@@ -37,10 +42,16 @@ class Distribution(ABC):
 class NormalDistribution(Distribution):
     @classmethod
     def default_link(cls) -> type[LinkFunction]:
-        """Return the default link function for this distribution."""
-        pass
+        return IdentityLink
 
-    def deviance(self, y: T, eta: T, w: T, link: LinkFunction, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         # TODO: check weights
         if isinstance(link, IdentityLink):
             # Identity link means no transform needed here
@@ -58,10 +69,16 @@ class NormalDistribution(Distribution):
 class PoissonDistribution(Distribution):
     @classmethod
     def default_link(cls) -> type[LinkFunction]:
-        """Return the default link function for this distribution."""
-        pass
+        return LogLink
 
-    def deviance(self, y: T, eta: T, w: T, link: LinkFunction, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         # TODO: Check for that y are all non-negative integers
         # TODO: check weights
         if isinstance(link, LogLink):
@@ -82,11 +99,18 @@ class PoissonDistribution(Distribution):
 class BinomialDistribution(Distribution):
     @classmethod
     def default_link(cls) -> type[LinkFunction]:
-        """Return the default link function for this distribution."""
-        pass
+        return LogitLink
 
-    def deviance(self, y: T, eta: T, w: T, link: LinkFunction, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         # TODO: Check that y is non-negative integers and are all less than n
+        # TODO: Check than n are positive integers
         # TODO: check weights
         # TODO: Is there a way to be make n non-optional for this but not for others?
         if n is None:
@@ -94,7 +118,7 @@ class BinomialDistribution(Distribution):
 
         if isinstance(link, LogitLink):
             # TODO: Check this derivation
-            deviance = n * cp.logistic(eta) - cp.multiply(y, eta)
+            deviance = cp.multiply(n, cp.logistic(eta)) - cp.multiply(y, eta)
             deviance = 2 * cp.sum(cp.multiply(w, deviance))
         else:
             raise ValueError(f"Invalid link function used. {type(link)} was supplied but LogitLink is expected.")
@@ -108,10 +132,17 @@ class BinomialDistribution(Distribution):
 class GammaDistribution(Distribution):
     @classmethod
     def default_link(cls) -> type[LinkFunction]:
-        """Return the default link function for this distribution."""
-        pass
+        # TODO: Make this the inverse link
+        return LogLink
 
-    def deviance(self, y: T, eta: T, w: T, link: LinkFunction, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         # TODO: Check for positivity of y
         # TODO: check weights
         if isinstance(link, LogLink):
@@ -129,12 +160,20 @@ class GammaDistribution(Distribution):
 class InverseGaussianDistribution(Distribution):
     @classmethod
     def default_link(cls) -> type[LinkFunction]:
-        """Return the default link function for this distribution."""
-        pass
+        # TODO: Make this the inverse link
+        return LogLink
 
-    def deviance(self, y: T, mu: T, w: T, n: Optional[int] = None) -> cp.Expression:
+    def deviance(
+        self,
+        y: npt.NDArray,
+        eta: Union[npt.NDArray, cp.Expression],
+        w: npt.NDArray,
+        link: LinkFunction,
+        n: Optional[npt.NDArray] = None,
+    ) -> cp.Expression:
         # TODO: Check for positivity of y
         # TODO: check weights
+        mu = link.eval_inverse(eta)
         deviance = (y - mu) ** 2 / (mu**2 / y)
         val = cp.sum(cp.multiply(w, deviance))
 
