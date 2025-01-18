@@ -1,3 +1,5 @@
+from typing import Callable
+
 import numpy as np
 import numpy.testing as nptest
 import pytest
@@ -6,8 +8,9 @@ from sklearn.utils.estimator_checks import parametrize_with_checks
 from trendfilterpy import TrendFilterRegression
 
 
-@parametrize_with_checks([TrendFilterRegression()])
-def test_sklearn_checks(estimator, check) -> None:
+# TODO: Check why this fails type checking
+@parametrize_with_checks([TrendFilterRegression()])  # type: ignore
+def test_sklearn_checks(estimator: TrendFilterRegression, check: Callable) -> None:
     """Check that our estimator passes sklearn checks that valid estimators should pass."""
     check(estimator)
 
