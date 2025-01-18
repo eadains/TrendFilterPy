@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import TypeVar, Union
 
 import cvxpy as cp
+import numpy as np
 import numpy.typing as npt
 
 T = TypeVar("T", bound=Union[npt.NDArray, cp.Expression])
@@ -27,15 +28,27 @@ class IdentityLink(LinkFunction):
 
 class LogLink(LinkFunction):
     def eval(self, x: T) -> T:
-        return cp.log(x)
+        if isinstance(x, cp.Expression):
+            return cp.log(x)
+        else:
+            return np.log(x)
 
     def eval_inverse(self, x: T) -> T:
-        return cp.exp(x)
+        if isinstance(x, cp.Expression):
+            return cp.exp(x)
+        else:
+            return np.exp(x)
 
 
 class LogitLink(LinkFunction):
     def eval(self, x: T) -> T:
-        return cp.log(x / (1 - x))
+        if isinstance(x, cp.Expression):
+            return cp.log(x / (1 - x))
+        else:
+            return np.log(x / (1 - x))
 
     def eval_inverse(self, x: T) -> T:
-        return cp.inv_pos(1 + cp.exp(-x))
+        if isinstance(x, cp.Expression):
+            return cp.inv_pos(1 + cp.exp(-x))
+        else:
+            return 1 / (1 + np.exp(-x))
