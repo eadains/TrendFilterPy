@@ -31,7 +31,12 @@ DISTRIBUTIONS = [
         LogitLink,
         lambda rng, eta, link: rng.binomial(1, link.eval_inverse(eta)),
     ),
-    (GammaDistribution, sm.families.Gamma(), LogLink, lambda rng, eta, link: rng.gamma(1.0, link.eval_inverse(eta))),
+    (
+        GammaDistribution,
+        sm.families.Gamma(sm.families.links.Log()),
+        LogLink,
+        lambda rng, eta, link: rng.gamma(link.eval_inverse(eta) ** 2, 1 / link.eval_inverse(eta)),
+    ),
 ]
 
 
@@ -50,8 +55,9 @@ class TestDeviance:
         n_samples = 1000
         n_features = 10
 
-        X = rng.normal(0, 1, size=(n_samples, n_features))
-        beta_true = rng.normal(0, 1, size=n_features)
+        # Selecting small variance here so Gamma data is well-behaved enough for statsmodels fitting algorithm
+        X = rng.normal(0, 0.1, size=(n_samples, n_features))
+        beta_true = rng.normal(0, 0.1, size=n_features)
         eta = X @ beta_true
 
         y = random_sampler(rng, eta, link())
