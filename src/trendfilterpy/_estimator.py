@@ -12,10 +12,7 @@ from trendfilterpy._variables import CatVar, FilterVar, FittedCatVar, FittedFilt
 
 class TrendFilterRegression(RegressorMixin, BaseEstimator):
     def __init__(
-        self,
-        dist: type[_dists.Distribution] = _dists.NormalDistribution,
-        link: type[_links.LinkFunction] = _links.IdentityLink,
-        lam: float = 1,
+        self, dist: Optional[_dists.Distribution] = None, link: Optional[_links.LinkFunction] = None, lam: float = 1
     ) -> None:
         super().__init__()
         self.lam = lam
@@ -29,6 +26,8 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         weights: Optional[npt.ArrayLike] = None,
         categorical_features: Optional[list[int]] = None,
     ):
+        dist = _dists.NormalDistribution() if self.dist is None else self.dist
+        link = dist.canonical_link() if self.link is None else self.link
         # TODO: Check for convexity of self.dist deviance method
         # TODO: Check for monotonicity of self.link method
         if not categorical_features:
@@ -68,7 +67,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
 
         weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
 
-        objective = cp.Minimize(self.dist().deviance(y, eta, weights, self.link()) + self.lam * penalty)
+        objective = cp.Minimize(dist.deviance(y, eta, weights, link) + self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
         # TODO: Set initial guess intelligently from data
         # TODO: Test solver settings to increase performance for our specific problem
@@ -90,7 +89,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
             elif type(var) is FilterVar:
                 self.vars_.append(FittedFilterVar(var.unique_vals, var.beta.value, var.beta.name()))
 
-        self.mu_ = self.link().eval_inverse(eta).value
+        self.mu_ = link.eval_inverse(eta).value
         self.eta_ = eta.value
 
         if alpha.value is None:
