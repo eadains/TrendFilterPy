@@ -4,6 +4,7 @@ from trendfilterpy._dists import (
     InverseGaussianDistribution,
     NormalDistribution,
     PoissonDistribution,
+    TweedieDistribution,
 )
 from trendfilterpy._estimator import TrendFilterRegression
 from trendfilterpy._links import IdentityLink, LogLink
@@ -14,6 +15,7 @@ __all__ = [
     "GammaDistribution",
     "InverseGaussianDistribution",
     "PoissonDistribution",
+    "TweedieDistribution",
     "TrendFilterRegression",
     "IdentityLink",
     "LogLink",

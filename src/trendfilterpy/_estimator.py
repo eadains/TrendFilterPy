@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Sequence
 
 import cvxpy as cp
 import numpy as np
@@ -24,7 +24,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         X: npt.ArrayLike,
         y: npt.ArrayLike,
         weights: Optional[npt.ArrayLike] = None,
-        categorical_features: Optional[list[int]] = None,
+        categorical_features: Optional[Sequence[int]] = None,
     ):
         dist = _dists.NormalDistribution() if self.dist is None else self.dist
         link = dist.canonical_link() if self.link is None else self.link
@@ -60,21 +60,23 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         for var in vars:
             if type(var) is CatVar:
                 # TODO: Make sure penalty for categoricals is working/what we want?
-                penalty_terms.append(cp.norm(var.beta, 2))
+                penalty_terms.append(cp.norm(var.beta, 1))
             elif type(var) is FilterVar:
                 penalty_terms.append(cp.norm(var.D_mat @ var.beta, 1))
         penalty = cp.sum(penalty_terms)
 
         weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
 
-        objective = cp.Minimize(dist.deviance(y, eta, weights, link) + self.lam * penalty)
+        # Rescale the penalty term by the sum of sample weights so relevant scale of lambda is the same
+        # regardless of size of input dataset
+        objective = cp.Minimize(dist.deviance(y, eta, weights, link) + np.sum(weights) * self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
         # TODO: Set initial guess intelligently from data
         # TODO: Test solver settings to increase performance for our specific problem
         # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         problem = cp.Problem(objective, constraints)  # type: ignore
-        results = problem.solve(solver="CLARABEL")
+        results = problem.solve(solver="CLARABEL", verbose=True)
         # TODO: check for convergence
 
         self.vars_ = []

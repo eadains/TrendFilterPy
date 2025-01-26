@@ -53,9 +53,10 @@ class NormalDistribution(Distribution):
         if isinstance(link, IdentityLink):
             # Identity link means no transform needed for eta
             deviance = (y - eta) ** 2
-            deviance = cp.sum(cp.multiply(w, deviance))
         else:
             raise ValueError(f"Invalid link function used. {type(link)} was supplied but IdentityLink is expected.")
+
+        deviance = cp.sum(cp.multiply(w, deviance))
 
         if isinstance(deviance, cp.Expression):
             return deviance
@@ -82,9 +83,10 @@ class PoissonDistribution(Distribution):
             # convex
             # TODO: Elaborate this derivation in docstring
             deviance = -cp.multiply(y, eta) + cp.exp(eta)
-            deviance = 2 * cp.sum(cp.multiply(w, deviance))
         else:
             raise ValueError(f"Invalid link function used. {type(link)} was supplied but LogLink is expected.")
+
+        deviance = 2 * cp.sum(cp.multiply(w, deviance))
 
         if isinstance(deviance, cp.Expression):
             return deviance
@@ -114,9 +116,10 @@ class BinomialDistribution(Distribution):
         if isinstance(link, LogitLink):
             # TODO: Check this derivation
             deviance = cp.multiply(n, cp.logistic(eta)) - cp.multiply(y, eta)
-            deviance = 2 * cp.sum(cp.multiply(w, deviance))
         else:
             raise ValueError(f"Invalid link function used. {type(link)} was supplied but LogitLink is expected.")
+
+        deviance = 2 * cp.sum(cp.multiply(w, deviance))
 
         if isinstance(deviance, cp.Expression):
             return deviance
