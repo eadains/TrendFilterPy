@@ -7,7 +7,7 @@ from trendfilterpy._dists import (
     TweedieDistribution,
 )
 from trendfilterpy._estimator import TrendFilterRegression
-from trendfilterpy._links import IdentityLink, LogLink
+from trendfilterpy._links import IdentityLink, LogitLink, LogLink
 
 __all__ = [
     "NormalDistribution",
@@ -19,4 +19,5 @@ __all__ = [
     "TrendFilterRegression",
     "IdentityLink",
     "LogLink",
+    "LogitLink",
 ]

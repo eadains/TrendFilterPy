@@ -4,6 +4,7 @@ import cvxpy as cp
 import numpy as np
 import numpy.typing as npt
 import sklearn.utils.validation as skval
+from scipy.linalg import block_diag
 from sklearn.base import BaseEstimator, RegressorMixin
 
 from trendfilterpy import _dists, _links
@@ -25,6 +26,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         y: npt.ArrayLike,
         weights: Optional[npt.ArrayLike] = None,
         categorical_features: Optional[Sequence[int]] = None,
+        n: Optional[npt.ArrayLike] = None,
     ):
         dist = _dists.NormalDistribution() if self.dist is None else self.dist
         link = dist.canonical_link() if self.link is None else self.link
@@ -56,20 +58,30 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         alpha = cp.Variable(name="alpha")
         eta = alpha + cp.sum([var.beta[var.rebuild_idx] for var in vars])
 
-        penalty_terms = []
+        # penalty_terms = []
+        # for var in vars:
+        #     if type(var) is CatVar:
+        #         # TODO: Make sure penalty for categoricals is working/what we want?
+        #         penalty_terms.append(cp.norm(var.beta, 1))
+        #     elif type(var) is FilterVar:
+        #         penalty_terms.append(cp.norm(var.D_mat @ var.beta, 1))
+        # penalty = cp.sum(penalty_terms)
+        penalty_vecs = []
         for var in vars:
             if type(var) is CatVar:
                 # TODO: Make sure penalty for categoricals is working/what we want?
-                penalty_terms.append(cp.norm(var.beta, 1))
+                penalty_vecs.append(np.identity(len(var.unique_vals)))
             elif type(var) is FilterVar:
-                penalty_terms.append(cp.norm(var.D_mat @ var.beta, 1))
-        penalty = cp.sum(penalty_terms)
+                penalty_vecs.append(var.D_mat.toarray())
+        penalty_mat = block_diag(*penalty_vecs)
+        penalty = cp.norm(penalty_mat @ cp.hstack([var.beta for var in vars]), 1)
 
         weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
+        n = np.asarray(n) if n else None
 
         # Rescale the penalty term by the sum of sample weights so relevant scale of lambda is the same
         # regardless of size of input dataset
-        objective = cp.Minimize(dist.deviance(y, eta, weights, link) + np.sum(weights) * self.lam * penalty)
+        objective = cp.Minimize(dist.deviance(y, eta, weights, link, n) + np.sum(weights) * self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
         # TODO: Set initial guess intelligently from data
         # TODO: Test solver settings to increase performance for our specific problem
