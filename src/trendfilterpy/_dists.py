@@ -3,7 +3,6 @@ from typing import Optional, Union
 
 import cvxpy as cp
 import numpy.typing as npt
-from numpy._typing import NDArray
 
 from trendfilterpy._links import IdentityLink, LinkFunction, LogitLink, LogLink, PowerLink
 
