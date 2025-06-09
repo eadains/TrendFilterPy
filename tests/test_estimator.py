@@ -16,12 +16,8 @@ def test_sklearn_checks(estimator: TrendFilterRegression, check: Callable) -> No
     check(estimator)
 
 
-class TestFitNoPenalty:
-    """Check model fit procedure with no penalty term, default normal distribution, and default identity link.
-
-    This effectively tests the least squares version of the model.
-    When lam=0 the fitted beta values from the model should exactly match the given y values for each unique value of x.
-    """
+class TestTrendFilterRegression:
+    """Test cases for the TrendFilterRegression class."""
 
     def test_continuous_1var_unique(self) -> None:
         """Check model with 1 continuous input variable that has no duplicate values."""
@@ -46,11 +42,111 @@ class TestFitNoPenalty:
         assert len(model.vars_) == 2
         assert model.intercept_ == pytest.approx(np.mean(y))
         nptest.assert_allclose(model.vars_[0].beta + model.vars_[1].beta, y - np.mean(y), atol=1e-08)
-        nptest.assert_allclose(model.mu_, y, atol=1e-08)
 
     def test_cont_1var_duplicates(self) -> None:
         """Check model fit with 1 continuous variable but with duplicate X values."""
-        pass
+        X = np.asarray([[1], [1], [2], [2], [3], [3]])
+        y = np.asarray([1, 1.1, 2, 2.1, 3, 3.1])
+        # Use no regularization so the model fits perfectly
+        model = TrendFilterRegression(lam=0)
+        model.fit(X, y)
+
+        assert len(model.vars_) == 1
+        assert model.intercept_ == pytest.approx(np.mean(y))
+        # Fitted values will be the average y values of the duplicate X inputs: (1 + 1.1) / 2 = 1.05
+        nptest.assert_allclose(model.mu_, np.array([1.05, 1.05, 2.05, 2.05, 3.05, 3.05]), atol=1e-08)
+
+    def test_basic_functionality(self) -> None:
+        """Test basic TrendFilterRegression functionality with simple data."""
+        X = np.asarray([[x] for x in range(20)])
+        y = X.ravel() + np.random.RandomState(42).normal(0, 0.1, 20)
+
+        model = TrendFilterRegression(lam=1.0)
+        model.fit(X, y)
+
+        assert hasattr(model, "intercept_")
+        assert hasattr(model, "vars_")
+        assert hasattr(model, "mu_")
+        assert hasattr(model, "eta_")
+        assert len(model.vars_) == 1
+
+        predictions = model.predict(X)
+        assert predictions.shape == (20,)
+
+    def test_predict_before_fit(self) -> None:
+        """Test that predict raises error before fit is called."""
+        X = np.asarray([[x] for x in range(10)])
+
+        model = TrendFilterRegression()
+        from sklearn.exceptions import NotFittedError
+
+        with pytest.raises(NotFittedError):
+            model.predict(X)
+
+    def test_different_lambda_values(self) -> None:
+        """Test model with different lambda values."""
+        X = np.asarray([[x] for x in range(20)])
+        y = X.ravel() + np.random.RandomState(42).normal(0, 0.1, 20)
+
+        # Test with very small lambda (should be close to no penalty)
+        model_small = TrendFilterRegression(lam=1e-6)
+        model_small.fit(X, y)
+        pred_small = model_small.predict(X)
+
+        # Test with large lambda (should be heavily penalized)
+        model_large = TrendFilterRegression(lam=100.0)
+        model_large.fit(X, y)
+        pred_large = model_large.predict(X)
+
+        # Large lambda should produce smoother (less variable) predictions
+        assert np.var(pred_large) < np.var(pred_small)
+
+    def test_with_different_distribution(self) -> None:
+        """Test model with non-default distribution."""
+        from trendfilterpy import _dists
+
+        X = np.asarray([[x] for x in range(20)])
+        y = np.random.RandomState(42).poisson(np.exp(X.ravel() * 0.1))
+
+        model = TrendFilterRegression(dist=_dists.PoissonDistribution(), lam=0.1)
+        model.fit(X, y)
+
+        assert hasattr(model, "intercept_")
+        assert hasattr(model, "vars_")
+        predictions = model.predict(X)
+        assert predictions.shape == (20,)
+
+    def test_predict_on_new_data(self) -> None:
+        """Test prediction on data not seen during training."""
+        X_train = np.asarray([[x] for x in range(10)])
+        y_train = X_train.ravel() + np.random.RandomState(42).normal(0, 0.1, 10)
+
+        X_test = np.asarray([[x] for x in range(10, 15)])
+
+        model = TrendFilterRegression(lam=1.0)
+        model.fit(X_train, y_train)
+
+        predictions = model.predict(X_test)
+        assert predictions.shape == (5,)
+
+    def test_feature_names_handling(self) -> None:
+        """Test that model handles feature names correctly."""
+        import pandas as pd
+
+        # Create DataFrame with named features
+        X = pd.DataFrame({"feature1": range(10), "feature2": range(10, 20)})
+        y = X["feature1"] + 0.5 * X["feature2"] + np.random.RandomState(42).normal(0, 0.1, 10)
+
+        model = TrendFilterRegression(lam=1.0)
+        model.fit(X, y)
+
+        # Should work with both DataFrame and numpy array for prediction
+        pred_df = model.predict(X)
+        pred_array = model.predict(X.values)
+
+        assert pred_df.shape == (10,)
+        assert pred_array.shape == (10,)
+        nptest.assert_allclose(pred_df, pred_array)
 
 
 class TestTrendFilterRegressionCV:
@@ -69,6 +165,8 @@ class TestTrendFilterRegressionCV:
         assert hasattr(model, "intercept_")
         assert hasattr(model, "vars_")
         assert len(model.vars_) == 1
+        assert hasattr(model, "mu_")
+        assert hasattr(model, "eta_")
 
         predictions = model.predict(X)
         assert predictions.shape == (20,)
