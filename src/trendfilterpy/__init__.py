@@ -6,7 +6,7 @@ from trendfilterpy._dists import (
     PoissonDistribution,
     TweedieDistribution,
 )
-from trendfilterpy._estimator import TrendFilterRegression
+from trendfilterpy._estimator import TrendFilterRegression, TrendFilterRegressionCV
 from trendfilterpy._links import IdentityLink, LogLink
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "PoissonDistribution",
     "TweedieDistribution",
     "TrendFilterRegression",
+    "TrendFilterRegressionCV",
     "IdentityLink",
     "LogLink",
 ]

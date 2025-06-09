@@ -1,4 +1,4 @@
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence
 
 import cvxpy as cp
 import numpy as np
@@ -13,7 +13,7 @@ from trendfilterpy._variables import CatVar, FilterVar, FittedCatVar, FittedFilt
 
 class TrendFilterRegression(RegressorMixin, BaseEstimator):
     def __init__(
-        self, dist: Optional[_dists.Distribution] = None, link: Optional[_links.LinkFunction] = None, lam: float = 1
+        self, dist: Optional[_dists.Distribution] = None, link: Optional[_links.LinkFunction] = None, lam: float = 0.01
     ) -> None:
         super().__init__()
         self.lam = lam
@@ -78,7 +78,7 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         problem = cp.Problem(objective, constraints)  # type: ignore
-        results = problem.solve(solver="CLARABEL", verbose=True)
+        problem.solve(solver="CLARABEL", verbose=True)
         # TODO: check for convergence
 
         self.vars_ = []
@@ -119,7 +119,7 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
         self,
         dist: Optional[_dists.Distribution] = None,
         link: Optional[_links.LinkFunction] = None,
-        lams: Sequence[float] = [0.01, 0.1, 1, 10],
+        lams: Sequence[float] = (0.01, 0.1, 1, 10),
     ) -> None:
         super().__init__()
         self.lams = lams
@@ -155,6 +155,31 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
 
         return vars, alpha, eta, penalty
 
+    def _make_problem(
+        self,
+        dist: _dists.Distribution,
+        link: _links.LinkFunction,
+        X: npt.NDArray,
+        y: npt.NDArray,
+        weights: npt.NDArray,
+        categorical_features: Sequence[int],
+    ):
+        vars, alpha, eta, penalty = self._make_terms(X, y, weights, categorical_features)
+
+        lam = cp.Parameter(name="lambda", nonneg=True)
+        objective = cp.Minimize(
+            # Rescale the penalty term by the sum of sample weights so relevant scale of lambda is the same
+            # regardless of size of input dataset. This is the same as taking the weighted mean deviance, but
+            # is more numerically stable (fewer tiny values)
+            dist.deviance(y, eta, weights, link) + np.sum(weights) * lam * penalty
+        )
+        constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
+        # TODO: Set initial guess intelligently from data
+        # TODO: Test solver settings to increase performance for our specific problem
+        # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
+        # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
+        return cp.Problem(objective, constraints), lam, vars, alpha, eta  # type: ignore
+
     def fit(
         self,
         X: npt.ArrayLike,
@@ -177,11 +202,9 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
 
         weights = np.ones(X.shape[0]) if weights is None else np.asarray(weights)
 
-        # Rescale the penalty term by the sum of sample weights so relevant scale of lambda is the same
-        # regardless of size of input dataset. This is the same as taking the weighted mean deviance, but
-        # is more numerically stable (fewer tiny values)
         cv_results = np.zeros((cv.get_n_splits(), len(self.lams)))
         for i, (train, test) in enumerate(cv.split(X, y)):
+            print(f"CV Fold: {i+1}")
             X_train = X[train]
             y_train = y[train]
             weights_train = weights[train]
@@ -190,33 +213,35 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
             y_test = y[test]
             weights_test = weights[test]
 
-            vars, alpha, eta, penalty = self._make_terms(X_train, y_train, weights_train, categorical_features)
-            lam = cp.Parameter(name="lambda", nonneg=True)
-            objective = cp.Minimize(
-                dist.deviance(y_train, eta, weights_train, link) + np.sum(weights_train) * lam * penalty
+            # TODO: Refactor so we don't have to recompile the problem for each CV fold as this is quite time
+            # consuming for larger models
+            problem, lam, vars, alpha, _ = self._make_problem(
+                dist, link, X_train, y_train, weights_train, categorical_features
             )
-            constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
-            # TODO: Set initial guess intelligently from data
-            # TODO: Test solver settings to increase performance for our specific problem
-            # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
-            # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
-            problem = cp.Problem(objective, constraints)  # type: ignore
 
             fold_results = np.zeros(len(self.lams))
-            for i, lam_val in enumerate(self.lams):
+            for j, lam_val in enumerate(self.lams):
                 lam.value = lam_val
-                problem.solve(solver="CLARABEL", verbose=True)
+                problem.solve(solver="CLARABEL", verbose=False)
                 # TODO: check for convergence
 
                 oos_eta = np.full(X_test.shape[0], alpha.value)
-                for i in range(X_test.shape[1]):
-                    oos_eta += vars[i].predict(X_test[:, i]).value
+                for k in range(X_test.shape[1]):
+                    # These vars are not Fitted, so this is a CVXPY expression, so we need to extract its value
+                    oos_eta += vars[k].predict(X_test[:, k]).value
 
-                fold_results[i] = dist.deviance(y_test, oos_eta, weights_test, link).value
+                print({np.sum(weights_test * (y_test - oos_eta) ** 2)})
+                fold_results[j] = dist.deviance(y_test, oos_eta, weights_test, link).value
 
             cv_results[i] = fold_results
 
-        return cv_results
+        mean_cv_results = np.mean(cv_results, axis=0)
+        lam_min_idx = int(np.argmin(mean_cv_results))
+        self.best_lam_ = self.lams[lam_min_idx]
+
+        problem, lam, vars, alpha, eta = self._make_problem(dist, link, X, y, weights, categorical_features)
+        lam.value = self.best_lam_
+        problem.solve(solver="CLARABEL", verbose=False)
 
         self.vars_ = []
         for i, var in enumerate(vars):
@@ -238,3 +263,14 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
         self.intercept_ = alpha.value.item()
 
         return self
+
+    def predict(self, X: npt.ArrayLike):
+        skval.check_is_fitted(self)
+        checked: npt.NDArray = skval.validate_data(self, X, reset=False)  # type: ignore
+        X = checked
+
+        predictions = np.full(X.shape[0], self.intercept_)
+        for i in range(X.shape[1]):
+            predictions += self.vars_[i].predict(X[:, i])
+
+        return predictions
