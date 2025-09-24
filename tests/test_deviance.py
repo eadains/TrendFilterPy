@@ -112,13 +112,9 @@ class TestDeviance:
 
     @pytest.mark.parametrize("dist,statsmodels_family,link,random_sampler", DISTRIBUTIONS)
     def test_glm_coefficients_match_statsmodels(
-        self,
-        dist: Distribution,
-        statsmodels_family: sm.families.Family,
-        link: LinkFunction,
-        # TODO: Clarify what this callable takes as arguments
-        random_sampler: Callable,
-    ):
+        self, dist: Distribution, statsmodels_family: sm.families.Family, link: LinkFunction, random_sampler: Callable
+    ) -> None:
+        """Test that a basic GLM fit matches the results from Statsmodels."""
         n_samples = 1000
         n_features = 10
         # Generating strictly positive data so mu is positive for power link functions and also using uniform

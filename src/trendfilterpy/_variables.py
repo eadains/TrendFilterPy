@@ -21,7 +21,7 @@ class FilterVar:
         self.D_mat = make_D_matrix(len(self.unique_vals))
         self.beta = cp.Variable(len(self.unique_vals), name=name)
 
-    def predict(self, x: npt.ArrayLike):
+    def predict(self, x: npt.ArrayLike) -> cp.Expression:
         # Our fitted function is stepwise and right continuous so we want our index to satisfy a[i-1] <= v < a[i]
         idx = np.searchsorted(self.unique_vals, x, side="right")
         # Then we want the beta value from i - 1 as that gives the proper value for the range that v falls in
@@ -37,7 +37,7 @@ class FittedFilterVar:
         self.beta = beta
         self.name = name
 
-    def predict(self, x: npt.ArrayLike):
+    def predict(self, x: npt.ArrayLike) -> np.ndarray:
         idx = np.searchsorted(self.unique_vals, x, side="right")
         idx = np.where(idx == 0, idx, idx - 1)
         return self.beta[idx]
@@ -48,7 +48,7 @@ class CatVar:
         self.unique_vals, self.rebuild_idx = np.unique(x, return_inverse=True)
         self.beta = cp.Variable(len(self.unique_vals), name=name)
 
-    def predict(self, x: npt.ArrayLike):
+    def predict(self, x: npt.ArrayLike) -> cp.Expression:
         # TODO: Handle unseen categories
         idx = np.searchsorted(self.unique_vals, x, side="right")
         idx = np.where(idx == 0, idx, idx - 1)
@@ -61,7 +61,7 @@ class FittedCatVar:
         self.beta = beta
         self.name = name
 
-    def predict(self, x: npt.ArrayLike):
+    def predict(self, x: npt.ArrayLike) -> np.ndarray:
         # TODO: Handle unseen categories
         idx = np.searchsorted(self.unique_vals, x, side="right")
         idx = np.where(idx == 0, idx, idx - 1)

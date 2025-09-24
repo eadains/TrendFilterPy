@@ -161,8 +161,6 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         """
         dist = _dists.NormalDistribution() if self.dist is None else self.dist
         link = dist.canonical_link() if self.link is None else self.link
-        # TODO: Check for convexity of self.dist deviance method
-        # TODO: Check for monotonicity of self.link method
         if not categorical_features:
             categorical_features = []
 
@@ -205,8 +203,6 @@ class TrendFilterRegression(RegressorMixin, BaseEstimator):
         # is more numerically stable (fewer tiny values)
         objective = cp.Minimize(dist.deviance(y, eta, weights, link) + np.sum(weights) * self.lam * penalty)
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
-        # TODO: Set initial guess intelligently from data
-        # TODO: Test solver settings to increase performance for our specific problem
         # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         problem = cp.Problem(objective, constraints)  # type: ignore
@@ -479,8 +475,6 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
             dist.deviance(y, eta, weights, link) + np.sum(weights) * lam * penalty
         )
         constraints = [cp.Zero(cp.sum(var.beta)) for var in vars if type(var) is FilterVar]
-        # TODO: Set initial guess intelligently from data
-        # TODO: Test solver settings to increase performance for our specific problem
         # CVXPY Problem is annotated as List[Constraint] which is invariant, so a list of Zero constraints is not
         # considered a subtype. The type annotation for Problem should be Sequence[Constraint]
         return cp.Problem(objective, constraints), lam, vars, alpha, eta  # type: ignore
