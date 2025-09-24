@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Union
+from typing import Optional, Self, Sequence, Union
 
 import cvxpy as cp
 import numpy as np
@@ -6,7 +6,6 @@ import numpy.typing as npt
 import sklearn.utils.validation as skval
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.model_selection import BaseCrossValidator, KFold
-from typing_extensions import Self
 
 from trendfilterpy import _dists, _links
 from trendfilterpy._variables import CatVar, FilterVar, FittedCatVar, FittedFilterVar
@@ -545,7 +544,7 @@ class TrendFilterRegressionCV(RegressorMixin, BaseEstimator):
 
         cv_results = np.zeros((cv.get_n_splits(), len(self.lams)))
         for i, (train, test) in enumerate(cv.split(X, y)):
-            print(f"CV Fold: {i+1}")
+            print(f"CV Fold: {i + 1}")
             X_train = X[train]
             y_train = y[train]
             weights_train = weights[train]
