@@ -31,7 +31,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py312"
 
 [tool.ruff.lint]
 # Defaults plus pydocstyle, flake8-bugbear, flake8-simplify, annotations, and import sorting
