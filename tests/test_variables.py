@@ -2,7 +2,7 @@ import cvxpy as cp
 import numpy as np
 import pytest
 
-from trendfilterpy._variables import CatVar, FittedCatVar
+from trendfilterpy._variables import CatVar, FilterVar, FittedCatVar, FittedFilterVar
 
 
 class TestCatVar:
@@ -89,6 +89,162 @@ class TestCatVar:
         cat_var.beta.value = self.beta_values
         expected_values = np.array([10.0, 0.0, 20.0, 0.0, 30.0])  # x_test_mixed = [0, 3, 1, 4, 2]
         np.testing.assert_array_almost_equal(result.value, expected_values)
+
+
+class TestFilterVar:
+    """Test cases for the FilterVar class."""
+
+    def setup_method(self):
+        """Setup test data for each test method."""
+        # Use continuous values for FilterVar
+        self.x_train = np.array([1.0, 2.5, 3.7, 1.0, 2.5])
+        self.x_test_within = np.array([1.5, 2.0, 3.0])  # Values within the range
+        self.x_test_below = np.array([0.5])  # Value below minimum
+        self.x_test_above = np.array([4.0])  # Value above maximum
+        self.x_test_mixed = np.array([0.5, 1.5, 2.8, 4.0])  # Mixed range
+        self.beta_values = np.array([10.0, 20.0, 30.0])  # Values for unique points [1.0, 2.5, 3.7]
+
+    def test_init_creates_correct_structures(self):
+        """Test that FilterVar initialization creates correct data structures."""
+        filter_var = FilterVar(self.x_train)
+
+        # Should have sorted unique values
+        expected_unique = np.array([1.0, 2.5, 3.7])
+        np.testing.assert_array_equal(filter_var.unique_vals, expected_unique)
+
+        # Should have CVXPY variable with correct size
+        assert isinstance(filter_var.beta, cp.Variable)
+        assert filter_var.beta.shape == (3,)
+
+    def test_predict_within_range(self):
+        """Test prediction with values within the training range."""
+        filter_var = FilterVar(self.x_train)
+        result = filter_var.predict(self.x_test_within)
+
+        # Result should be a CVXPY expression
+        assert isinstance(result, cp.Expression)
+        assert result.shape == (3,)
+
+        # Test that the expression values are correct
+        filter_var.beta.value = self.beta_values
+        # For stepwise right-continuous function:
+        # x=1.5 falls in [1.0, 2.5) -> index 0 -> value 10.0
+        # x=2.0 falls in [1.0, 2.5) -> index 0 -> value 10.0
+        # x=3.0 falls in [2.5, 3.7) -> index 1 -> value 20.0
+        expected_values = np.array([10.0, 10.0, 20.0])
+        np.testing.assert_array_almost_equal(result.value, expected_values)
+
+    def test_predict_below_minimum(self):
+        """Test prediction with value below minimum training value."""
+        filter_var = FilterVar(self.x_train)
+        result = filter_var.predict(self.x_test_below)
+
+        # Should return first beta value for values below minimum
+        filter_var.beta.value = self.beta_values
+        expected_values = np.array([10.0])  # Uses first value
+        np.testing.assert_array_almost_equal(result.value, expected_values)
+
+    def test_predict_above_maximum(self):
+        """Test prediction with value above maximum training value."""
+        filter_var = FilterVar(self.x_train)
+        result = filter_var.predict(self.x_test_above)
+
+        # Should return last beta value for values above maximum
+        filter_var.beta.value = self.beta_values
+        expected_values = np.array([30.0])  # Uses last value
+        np.testing.assert_array_almost_equal(result.value, expected_values)
+
+    def test_predict_mixed_range(self):
+        """Test prediction with mixed range of values."""
+        filter_var = FilterVar(self.x_train)
+        result = filter_var.predict(self.x_test_mixed)
+
+        filter_var.beta.value = self.beta_values
+        # x=0.5 (below min) -> index 0 -> 10.0
+        # x=1.5 (in [1.0, 2.5)) -> index 0 -> 10.0
+        # x=2.8 (in [2.5, 3.7)) -> index 1 -> 20.0
+        # x=4.0 (above max) -> index 2 -> 30.0
+        expected_values = np.array([10.0, 10.0, 20.0, 30.0])
+        np.testing.assert_array_almost_equal(result.value, expected_values)
+
+    def test_predict_exact_training_values(self):
+        """Test prediction with exact training values."""
+        filter_var = FilterVar(self.x_train)
+        result = filter_var.predict(filter_var.unique_vals)
+
+        filter_var.beta.value = self.beta_values
+        # Exact values should map to their corresponding beta values
+        expected_values = np.array([10.0, 20.0, 30.0])
+        np.testing.assert_array_almost_equal(result.value, expected_values)
+
+
+class TestFittedFilterVar:
+    """Test cases for the FittedFilterVar class."""
+
+    def setup_method(self):
+        """Setup test data for each test method."""
+        self.unique_vals = np.array([1.0, 2.5, 3.7])
+        self.beta = np.array([10.0, 20.0, 30.0])
+        self.x_test_within = np.array([1.5, 2.0, 3.0])
+        self.x_test_below = np.array([0.5])
+        self.x_test_above = np.array([4.0])
+        self.x_test_mixed = np.array([0.5, 1.5, 2.8, 4.0])
+
+    def test_predict_within_range(self):
+        """Test prediction with values within the range."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(self.x_test_within)
+
+        expected_values = np.array([10.0, 10.0, 20.0])
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_below_minimum(self):
+        """Test prediction with value below minimum."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(self.x_test_below)
+
+        expected_values = np.array([10.0])
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_above_maximum(self):
+        """Test prediction with value above maximum."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(self.x_test_above)
+
+        expected_values = np.array([30.0])
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_mixed_range(self):
+        """Test prediction with mixed range of values."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(self.x_test_mixed)
+
+        expected_values = np.array([10.0, 10.0, 20.0, 30.0])
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_exact_training_values(self):
+        """Test prediction with exact training values."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(self.unique_vals)
+
+        expected_values = np.array([10.0, 20.0, 30.0])
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_single_value(self):
+        """Test prediction with a single value."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(np.array([2.7]))
+
+        expected_values = np.array([20.0])  # Falls in [2.5, 3.7)
+        np.testing.assert_array_almost_equal(result, expected_values)
+
+    def test_predict_empty_array(self):
+        """Test prediction with empty array."""
+        fitted_filter_var = FittedFilterVar(self.unique_vals, self.beta)
+        result = fitted_filter_var.predict(np.array([]))
+
+        expected_values = np.array([])
+        np.testing.assert_array_equal(result, expected_values)
 
 
 class TestFittedCatVar:
