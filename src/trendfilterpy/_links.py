@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Union
+from typing import TypeVar
 
 import cvxpy as cp
 import numpy as np
 import numpy.typing as npt
 
-T = TypeVar("T", bound=Union[npt.NDArray, cp.Expression])
+T = TypeVar("T", npt.NDArray, cp.Expression)
 
 
 class LinkFunction(ABC):
