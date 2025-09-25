@@ -11,6 +11,31 @@ def make_D_matrix(n: int) -> dia_matrix:
     return spdiags(np.vstack([-ones, ones]), range(2), m=n - 1, n=n)
 
 
+def _get_stepwise_indices(unique_vals: npt.ArrayLike, x: npt.ArrayLike) -> np.ndarray:
+    """Get indices for stepwise function mapping using searchsorted.
+
+    Maps input values to indices in unique_vals array using right-continuous
+    step function logic. Used for both continuous (FilterVar) and categorical
+    (CatVar) variable indexing.
+
+    Parameters
+    ----------
+    unique_vals : array_like
+        Sorted array of unique values defining the step function breakpoints.
+    x : array_like
+        Input values to map to indices.
+
+    Returns
+    -------
+    numpy.ndarray
+        Array of indices corresponding to each value in x, where each index
+        satisfies unique_vals[i-1] <= x < unique_vals[i] for the right-continuous
+        step function.
+    """
+    idx = np.searchsorted(unique_vals, x, side="right")
+    return np.where(idx == 0, idx, idx - 1)
+
+
 class FilterVar:
     def __init__(self, x: npt.ArrayLike, name: Optional[str] = None) -> None:
         # TODO: Do we want to check for x to be 1-dimensional? I don't expect users to be creating these so that may
@@ -23,11 +48,7 @@ class FilterVar:
 
     def predict(self, x: npt.ArrayLike) -> cp.Expression:
         # Our fitted function is stepwise and right continuous so we want our index to satisfy a[i-1] <= v < a[i]
-        idx = np.searchsorted(self.unique_vals, x, side="right")
-        # Then we want the beta value from i - 1 as that gives the proper value for the range that v falls in
-        # If 0 then x is below smallest observed value so we want to return the first value. When x is greater than
-        # largest observed value idx = len(beta) so we want to return the last element that has index 1 less than that
-        idx = np.where(idx == 0, idx, idx - 1)
+        idx = _get_stepwise_indices(self.unique_vals, x)
         return self.beta[idx]
 
 
@@ -38,8 +59,7 @@ class FittedFilterVar:
         self.name = name
 
     def predict(self, x: npt.ArrayLike) -> np.ndarray:
-        idx = np.searchsorted(self.unique_vals, x, side="right")
-        idx = np.where(idx == 0, idx, idx - 1)
+        idx = _get_stepwise_indices(self.unique_vals, x)
         return self.beta[idx]
 
 
@@ -69,8 +89,7 @@ class CatVar:
                 seen_mask = ~is_unseen
                 if np.any(seen_mask):
                     seen_x = x_array[seen_mask]
-                    idx = np.searchsorted(self.unique_vals, seen_x, side="right")
-                    idx = np.where(idx == 0, idx, idx - 1)
+                    idx = _get_stepwise_indices(self.unique_vals, seen_x)
                     # We need an array of the same length of seen_mask containing the desired index values
                     # for the zip below
                     idx_array = np.zeros_like(seen_mask, dtype=int)
@@ -82,8 +101,7 @@ class CatVar:
                 return selection_matrix @ self.beta
 
         # All values are seen, use original logic
-        idx = np.searchsorted(self.unique_vals, x_array, side="right")
-        idx = np.where(idx == 0, idx, idx - 1)
+        idx = _get_stepwise_indices(self.unique_vals, x_array)
         return self.beta[idx]
 
 
@@ -117,14 +135,12 @@ class FittedCatVar:
                 seen_mask = ~is_unseen
                 if np.any(seen_mask):
                     seen_x = x_array[seen_mask]
-                    idx = np.searchsorted(self.unique_vals, seen_x, side="right")
-                    idx = np.where(idx == 0, idx, idx - 1)
+                    idx = _get_stepwise_indices(self.unique_vals, seen_x)
                     result[seen_mask] = self.beta[idx]
 
                 # Any elements not set are 0 by construction
                 return result
 
         # All values are seen
-        idx = np.searchsorted(self.unique_vals, x_array, side="right")
-        idx = np.where(idx == 0, idx, idx - 1)
+        idx = _get_stepwise_indices(self.unique_vals, x_array)
         return self.beta[idx]
